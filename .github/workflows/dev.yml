@@ -39,7 +39,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="dev-$(date -u +%Y%m%d%H%M%S)"
+          read -r build_timestamp timestamp <<< "$(date -u +'%Y%m%d%H%M%S %Y-%m-%dT%H:%M:%SZ')"
+          year_month="${build_timestamp:2:4}"
+          day_hour="${build_timestamp:6:2}${build_timestamp:8:2}"
+          minute_second="${build_timestamp:10:4}"
+          version="0.${year_month}.${day_hour}.${minute_second}"
+          release_tag="dev-${version}"
           plugin="Jellyfin.Plugin.WatchRecommendations"
           assembly="${plugin}/bin/Release/net10.0/${plugin}.dll"
           zip_name="${plugin}_${version}.zip"
@@ -48,31 +53,36 @@ jobs:
           dotnet build "${plugin}/${plugin}.csproj" \
             --configuration Release \
             --no-restore \
-            -p:InformationalVersion="${version}"
+            -p:Version="${version}" \
+            -p:AssemblyVersion="${version}" \
+            -p:FileVersion="${version}" \
+            -p:InformationalVersion="${version}-dev.${build_timestamp}"
 
           test -f "${assembly}"
           zip -j -9 "${zip_path}" "${assembly}"
           checksum="$(md5sum "${zip_path}" | awk '{ print $1 }')"
-          source_url="https://github.com/${REPOSITORY}/releases/download/${version}/${zip_name}"
+          source_url="https://github.com/${REPOSITORY}/releases/download/${release_tag}/${zip_name}"
 
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "release-tag=${release_tag}" >> "${GITHUB_OUTPUT}"
           echo "zip-path=${zip_path}" >> "${GITHUB_OUTPUT}"
           echo "zip-name=${zip_name}" >> "${GITHUB_OUTPUT}"
           echo "source-url=${source_url}" >> "${GITHUB_OUTPUT}"
           echo "checksum=${checksum}" >> "${GITHUB_OUTPUT}"
-          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
+          echo "timestamp=${timestamp}" >> "${GITHUB_OUTPUT}"
 
       - name: Publish development GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           DEV_SHA: ${{ github.sha }}
           VERSION: ${{ steps.package.outputs.version }}
+          RELEASE_TAG: ${{ steps.package.outputs.release-tag }}
           ZIP_PATH: ${{ steps.package.outputs.zip-path }}
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "${VERSION}" "${ZIP_PATH}" \
-            --title "${VERSION}" \
+          gh release create "${RELEASE_TAG}" "${ZIP_PATH}" \
+            --title "Development build ${VERSION}" \
             --notes "Automated development build from Dev commit ${DEV_SHA}." \
             --prerelease \
             --target "${DEV_SHA}"
