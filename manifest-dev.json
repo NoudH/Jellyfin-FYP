@@ -1,0 +1,11 @@
+[
+  {
+    "guid": "2e8de290-51e4-4a2d-b148-73f43e48a72a",
+    "name": "Watch Recommendations",
+    "description": "Development builds of Watch Recommendations with per-user recommendations and optional Jellyfin Enhanced Seerr integration.",
+    "overview": "Development builds of personalized watch recommendations.",
+    "owner": "Jellyfin-FYP contributors",
+    "category": "General",
+    "versions": []
+  }
+]
