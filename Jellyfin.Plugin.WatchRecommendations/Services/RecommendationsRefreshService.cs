@@ -41,10 +41,25 @@ public sealed class RecommendationsRefreshService
             try
             {
                 var profile = _dataSource.LoadProfile(userId, cancellationToken);
-                var externalCandidates = await _seerrCandidateProvider
-                    .GetCandidatesAsync(userId, profile.History, cancellationToken)
-                    .ConfigureAwait(false);
-                profile.Candidates.AddRange(externalCandidates);
+                try
+                {
+                    var externalCandidates = await _seerrCandidateProvider
+                        .GetCandidatesAsync(userId, profile.History, cancellationToken)
+                        .ConfigureAwait(false);
+                    profile.Candidates.AddRange(externalCandidates);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(
+                        exception,
+                        "Failed to fetch Seerr recommendations for Jellyfin user {UserId}; continuing without external recommendations.",
+                        userId);
+                }
+
                 var now = DateTime.UtcNow;
                 var result = new UserRecommendationCache
                 {

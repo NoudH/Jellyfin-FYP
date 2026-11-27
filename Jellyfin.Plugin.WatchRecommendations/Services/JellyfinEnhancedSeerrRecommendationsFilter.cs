@@ -26,8 +26,12 @@ public sealed class JellyfinEnhancedSeerrRecommendationsFilter : ISeerrRecommend
                 StringComparison.OrdinalIgnoreCase));
         var filterType = assembly?.GetType(ParentalFilterTypeName, throwOnError: false)
             ?? throw new InvalidOperationException("JE's Seerr parental filter is unavailable.");
-        var filter = _serviceProvider.GetService(filterType)
-            ?? throw new InvalidOperationException("JE's Seerr parental filter service is not registered.");
+        var filter = _serviceProvider.GetService(filterType);
+        if (filter is null)
+        {
+            return json;
+        }
+
         var applyMethod = filterType.GetMethod(
             "ApplyAsync",
             BindingFlags.Public | BindingFlags.Instance,

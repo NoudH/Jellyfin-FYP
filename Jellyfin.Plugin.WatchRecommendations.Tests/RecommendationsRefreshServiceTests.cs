@@ -77,7 +77,7 @@ public class RecommendationsRefreshServiceTests
     }
 
     [Fact]
-    public async Task SeerrProviderFailurePreservesPriorCache()
+    public async Task SeerrProviderFailureStillRefreshesLocalRecommendations()
     {
         var root = Path.Combine(AppContext.BaseDirectory, $"recommendations-seerr-failure-test-{Guid.NewGuid():N}");
         var userId = Guid.NewGuid();
@@ -99,7 +99,9 @@ public class RecommendationsRefreshServiceTests
 
             await service.RefreshAllUsersAsync(new NoOpProgress(), CancellationToken.None);
 
-            Assert.Equal("previous", cache.Get(userId)?.Recommendations.Single().Item.Name);
+            var recommendations = cache.Get(userId)!.Recommendations;
+            Assert.Contains(recommendations, recommendation => recommendation.Item.Name == "new");
+            Assert.DoesNotContain(recommendations, recommendation => recommendation.Item.Name == "previous");
         }
         finally
         {
