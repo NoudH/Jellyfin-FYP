@@ -28,8 +28,16 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Test solution
         run: dotnet test Jellyfin-FYP.sln --configuration Release --verbosity minimal
+
+      - name: Test KefinTweaks integration
+        run: node --test Jellyfin.Plugin.WatchRecommendations.Tests/KefinTweaksRecommendations.test.cjs
 
       - name: Build and package development plugin
         id: package
@@ -114,14 +122,17 @@ jobs:
               raise SystemExit(f"Plugin {plugin_guid} is missing from manifest-dev.json")
 
           plugin["owner"] = os.environ["REPOSITORY_OWNER"]
-          plugin["versions"] = [{
-              "version": os.environ["VERSION"],
+          version = os.environ["VERSION"]
+          versions = [entry for entry in plugin.get("versions", []) if entry.get("version") != version]
+          versions.insert(0, {
+              "version": version,
               "targetAbi": "12.0.0.0",
               "sourceUrl": os.environ["SOURCE_URL"],
               "checksum": os.environ["CHECKSUM"],
               "timestamp": os.environ["TIMESTAMP"],
               "changelog": f"Development build from Dev commit {os.environ['DEV_SHA'][:7]}.",
-          }]
+          })
+          plugin["versions"] = versions
           manifest_path.write_text(json.dumps(plugins, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           PY
 

@@ -22,6 +22,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Validate release tag
         id: version
         shell: bash
@@ -46,6 +51,9 @@ jobs:
           -p:Version="${RELEASE_VERSION}"
           -p:AssemblyVersion="${RELEASE_VERSION}"
           -p:FileVersion="${RELEASE_VERSION}"
+
+      - name: Test KefinTweaks integration
+        run: node --test Jellyfin.Plugin.WatchRecommendations.Tests/KefinTweaksRecommendations.test.cjs
 
       - name: Build and package plugin
         id: package

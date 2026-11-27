@@ -19,6 +19,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
             });
         serviceCollection.AddSingleton<RecommendationRanker>();
         serviceCollection.AddSingleton<RecommendationDataSource>();
+        serviceCollection.AddSingleton<IRecommendationItemsProvider, RecommendationItemsProvider>();
         serviceCollection.AddSingleton<IRecommendationDataSource>(provider => provider.GetRequiredService<RecommendationDataSource>());
         serviceCollection.AddSingleton<ISeerrIntegrationConfigurationSource, JellyfinEnhancedSeerrConfigurationSource>();
         serviceCollection.AddSingleton<ISeerrRecommendationsFilter, JellyfinEnhancedSeerrRecommendationsFilter>();

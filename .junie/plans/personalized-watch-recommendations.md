@@ -15,9 +15,11 @@ Build a Jellyfin plugin that periodically computes personalized movie and series
 - When JE is installed, Seerr is configured, and the relevant integration is usable, include off-library Seerr candidates in the scheduled result cache and offer JE's request action in the view.
 - If JE is absent, unavailable, unconfigured, or a user is not linked, retain library-only results and keep the view usable.
 - Scope history, cached results, and API responses to the authenticated Jellyfin user; never accept an arbitrary user ID from the frontend as authorization.
+- Expose a Jellyfin item-list API compatible with KefinTweaks custom home-screen sections, returning only the authenticated user's visible in-library recommendations in standard Jellyfin DTO format.
+- Offer an optional KefinTweaks home-screen integration that renders the full cached recommendation list, including off-library Seerr cards with JE poster and request actions when JE is available.
 
 ### Scope
-**In scope:** Jellyfin scheduled refresh, per-user hybrid ranking, server-side cached results, an authenticated API and embedded view, and optional JE/Seerr candidate and request integration.
+**In scope:** Jellyfin scheduled refresh, per-user hybrid ranking, server-side cached results, an authenticated API and embedded view, optional JE/Seerr candidate and request integration, and an opt-in KefinTweaks JavaScript Injector integration.
 
 **Out of scope:** a separately configured Seerr connector or credentials, collaborative ranking across users, and any edits to `External` (reference-only/read-only).
 
@@ -38,6 +40,7 @@ The root contains `Jellyfin-FYP.sln` but no plugin implementation. The read-only
 - Store computed results per Jellyfin user in a plugin-owned cache, persisted under Jellyfin's plugin data path and held in memory for API reads. Replace a user's cache only after a successful refresh so a partial failure does not erase the last usable results.
 - Add an authenticated recommendations API that derives the user ID from the Jellyfin request identity, returns only that user's cached results, and exposes refresh metadata. The browser only fetches and renders the response; it does not rank or load watch history.
 - For optional off-library candidates, isolate the scheduled-task Seerr proxy behind a server-side provider that is enabled only when JE is installed and uses JE's existing Seerr configuration and per-user linkage; keep JE's browser API for poster rendering and request submission. Do not add a separate Seerr configuration or credentials. If JE is unavailable, unconfigured, or cannot be accessed safely, retain local-only cached recommendations.
+- Ship a separate opt-in KefinTweaks integration script loaded through Jellyfin's JavaScript Injector. It consumes the authenticated mixed recommendation API and renders a dedicated home-screen strip; leave KefinTweaks' custom endpoint contract library-only and use JE's browser details/request APIs for off-library cards.
 
 ### Proposed Flow
 ```mermaid
@@ -49,7 +52,9 @@ graph TD
   RANK --> CACHE[Per-user persisted cache]
   CACHE --> API[Authenticated plugin API]
   API --> UI[Recommendations view]
+  API --> KTW[Optional injected KefinTweaks strip]
   UI -. off-library request .-> JEUI[JE browser request API]
+  KTW -. off-library poster and request .-> JEUI
 ```
 
 ### File Structure
@@ -59,6 +64,8 @@ Add a plugin project and register it in `Jellyfin-FYP.sln`:
 - `Jellyfin.Plugin.WatchRecommendations/Services/` — user history/library retrieval, hybrid ranking, per-user persisted cache, and optional JE Seerr candidate provider.
 - `Jellyfin.Plugin.WatchRecommendations/Controllers/RecommendationsController.cs` — authenticated endpoint for the current user's cached recommendations.
 - `Jellyfin.Plugin.WatchRecommendations/PluginPages/RecommendationsPage.html` and `js/` — fetch/render cached results and use JE's request API when available.
+- `Jellyfin.Plugin.WatchRecommendations/Integrations/KefinTweaksRecommendations.js` — optional JavaScript Injector integration that adds a dedicated mixed-recommendations strip to KefinTweaks' home screen.
+- `README.md` — setup instructions for the optional injector script and the library-only custom endpoint.
 - Add focused scheduled-task, ranking, cache, API authorization, and JE integration tests in a test project.
 
 ### Risks
@@ -71,6 +78,7 @@ JE's Seerr proxy actions are authenticated controller routes, not a documented c
 - Use deterministic fixtures to test hybrid scoring, optional ratings, mixed movies/series, duplicate provider IDs, and watched-item exclusion.
 - Exercise per-user refresh/cache behavior, persisted cache reload, cancellation/failure handling, and endpoint authorization with multiple Jellyfin users.
 - Mock the JE provider states: plugin absent, Seerr disabled/unlinked, server-side call succeeds, and call fails; verify request handoff remains optional in the UI.
+- Validate the optional KefinTweaks script's user scoping, mixed item ordering, duplicate-row prevention, graceful JE fallback, and JE poster/request calls.
 
 ### Key Scenarios
 - An administrator can configure the task trigger in Jellyfin and run a refresh manually; refresh computes results separately for each eligible user.
@@ -78,6 +86,7 @@ JE's Seerr proxy actions are authenticated controller routes, not a documented c
 - A successful JE integration adds and deduplicates off-library recommendations in the cache; JE request actions remain available from the UI.
 - With JE absent, unconfigured, unlinked, or failing, refreshed results remain library-only and the recommendations page still works.
 - A failed per-user refresh preserves the previous cache; a server restart reloads persisted cached results.
+- With the injector script enabled, KefinTweaks displays the cached mixed recommendations in rank order; external cards load posters and submit requests through JE, while missing JE leaves local cards usable.
 
 # Delivery Steps
 
@@ -111,3 +120,18 @@ The recommendations page displays the signed-in user's cached server-ranked resu
 - Update the embedded page to fetch, render, and handle empty, loading, stale, and library-only results without client-side ranking.
 - Resolve off-library poster art through JE's movie/TV details API, and connect request buttons to JE's request API with a graceful fallback when it is not present.
 - Add endpoint authorization and UI integration tests, including attempts to retrieve another user's cached data.
+
+### ✓ Step 5: Expose recommendations to KefinTweaks custom home-screen rows
+KefinTweaks can use a plugin endpoint as a custom query and render the signed-in user's recommended library items as Jellyfin cards.
+
+- Add a separate authenticated custom-endpoint route that returns `{ Items, TotalRecordCount }` using Jellyfin item DTOs; preserve the existing metadata API response.
+- Resolve cached recommendations against current Jellyfin items, include only visible in-library movies and series, preserve ranking order, and honor a bounded `Limit` while deriving the user only from authentication.
+- Document the endpoint path and KefinTweaks custom-query configuration; test DTO-list response shape, item eligibility/order/limit, and user isolation.
+
+### ✓ Step 6: Add an optional mixed-recommendations strip to KefinTweaks
+An opt-in JavaScript Injector integration adds a dedicated KefinTweaks home-screen strip with the signed-in user's cached library and off-library recommendations, using JE for external posters and requests when available.
+
+- Add a standalone integration script that loads the authenticated cached recommendations, resolves in-library items to Jellyfin DTOs, preserves ranking order, and renders a dedicated home-screen strip without modifying KefinTweaks.
+- Use JE's browser API for Seerr user eligibility, external poster details, and request submission; keep local cards available if JE is absent/unlinked or calls fail.
+- Handle Jellyfin user changes, SPA home-screen navigation, stale async responses, duplicate initialization, and missing plugin APIs safely.
+- Document how to load the script using JavaScript Injector and how to avoid duplicate local rows; add focused validation for mixed ordering and optional JE behavior.

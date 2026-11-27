@@ -34,6 +34,23 @@ The embedded **Watch Recommendations** view reads the latest cached results. Its
 
 The authenticated endpoint is `GET /WatchRecommendations/recommendations`. It derives the user from the Jellyfin authentication identity. Cached data is persisted under Jellyfin's plugin path at `configurations/Jellyfin.Plugin.WatchRecommendations/recommendations-cache.json`.
 
+### KefinTweaks home-screen row
+
+KefinTweaks can render the in-library recommendations as a custom home-screen section. Add a query with type **Custom Endpoint** and path `/WatchRecommendations/recommendations/items`; set a `Limit` such as `16` in the query options. The endpoint returns the standard Jellyfin `{ Items, TotalRecordCount }` result with Jellyfin item DTOs, preserves recommendation order, and includes only movies and series that the signed-in user can see in the library. Off-library Seerr results are omitted because they are not Jellyfin library items.
+
+#### Include external Seerr titles
+
+To show a mixed row containing library and off-library recommendations, install KefinTweaks and Jellyfin's JavaScript Injector, then add a script in the Injector that loads the optional integration:
+
+```javascript
+const script = document.createElement('script');
+script.src = 'https://cdn.jsdelivr.net/gh/NoudH/Jellyfin-FYP@master/Jellyfin.Plugin.WatchRecommendations/Integrations/KefinTweaksRecommendations.js';
+script.async = true;
+document.head.appendChild(script);
+```
+
+For builds from the `Dev` branch, replace `@master` with `@Dev`. The integration adds a dedicated **Recommended for you** strip to the KefinTweaks home screen. Off-library posters and request buttons appear when JE's Seerr integration is active and the Jellyfin user is linked; otherwise, the strip continues with visible in-library items.
+
 ## Build and test
 
 From the repository root, with the .NET 10 SDK installed:
@@ -43,8 +60,14 @@ dotnet test Jellyfin-FYP.sln
 dotnet build Jellyfin.Plugin.WatchRecommendations\Jellyfin.Plugin.WatchRecommendations.csproj --configuration Release
 ```
 
+Run the frontend integration tests with Node.js:
+
+```powershell
+node --test Jellyfin.Plugin.WatchRecommendations.Tests\KefinTweaksRecommendations.test.cjs
+```
+
 The plugin assembly is produced under `Jellyfin.Plugin.WatchRecommendations\bin\Release\net10.0\`.
 
 ## Releases
 
-Pushing a tag in the format `vMAJOR.MINOR.PATCH.REVISION` runs the stable build and test workflow, creates a GitHub Release, and updates `manifest.json`. Commits pushed to `Dev` run the development workflow and update `manifest-dev.json`; manifest-only commits do not trigger another development build.
+Pushing a tag in the format `vMAJOR.MINOR.PATCH.REVISION` runs the stable build and test workflow, creates a GitHub Release, and updates `manifest.json`. To get the latest development build, use the `manifest-dev.json` from the Dev branch instead.
