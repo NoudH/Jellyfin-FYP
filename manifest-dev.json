@@ -8,12 +8,12 @@
     "category": "General",
     "versions": [
       {
-        "version": "0.2611.2720.2908",
+        "version": "0.2611.2720.4345",
         "targetAbi": "12.0.0.0",
-        "sourceUrl": "https://github.com/NoudH/Jellyfin-FYP/releases/download/dev-0.2611.2720.2908/Jellyfin.Plugin.WatchRecommendations_0.2611.2720.2908.zip",
-        "checksum": "0df918d0530c22dcaa8e40fbee8e8db9",
-        "timestamp": "2026-11-27T20:29:08Z",
-        "changelog": "Development build from Dev commit c205377."
+        "sourceUrl": "https://github.com/NoudH/Jellyfin-FYP/releases/download/dev-0.2611.2720.4345/Jellyfin.Plugin.WatchRecommendations_0.2611.2720.4345.zip",
+        "checksum": "a70e1a0e005ba5e7c9f098467c24f75b",
+        "timestamp": "2026-11-27T20:43:45Z",
+        "changelog": "Development build from Dev commit b6bda03."
       }
     ]
   }
