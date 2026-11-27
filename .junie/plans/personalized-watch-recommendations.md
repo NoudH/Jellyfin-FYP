@@ -135,3 +135,11 @@ An opt-in JavaScript Injector integration adds a dedicated KefinTweaks home-scre
 - Use JE's browser API for Seerr user eligibility, external poster details, and request submission; keep local cards available if JE is absent/unlinked or calls fail.
 - Handle Jellyfin user changes, SPA home-screen navigation, stale async responses, duplicate initialization, and missing plugin APIs safely.
 - Document how to load the script using JavaScript Injector and how to avoid duplicate local rows; add focused validation for mixed ordering and optional JE behavior.
+
+### ✓ Step 7: Match JE recommendation cards and simplify user-facing copy
+Refine the mixed strip to use the same Jellyfin card and interaction patterns as Jellyfin Enhanced's Seerr recommendations, with local and external titles interleaved in one ranked row.
+
+- Replace the current custom-looking external cards with JE-style Seerr cards, preserving JE poster and request actions for external titles and standard Jellyfin navigation for local titles.
+- Keep both kinds of recommendations together in rank order rather than splitting them into separate rows.
+- Remove match percentages and implementation details such as cache terminology from user-facing text; use short, plain labels and concise empty/error states.
+- Update focused integration tests and documentation to reflect the final row and text behavior; keep `External` read-only.

@@ -1,8 +1,8 @@
 <div data-role="content">
   <section class="watch-recommendations-page" aria-live="polite">
-    <h1>Watch Recommendations</h1>
-    <p class="wr-status">Loading your recommendations…</p>
-    <button class="raised button-submit wr-reload" type="button">Reload results</button>
+    <h1>Recommended</h1>
+    <p class="wr-status">Loading…</p>
+    <button class="raised button-submit wr-reload" type="button">Reload</button>
     <div class="wr-grid"></div>
   </section>
 </div>
@@ -45,16 +45,11 @@
     grid.replaceChildren();
     const items = Array.isArray(data?.recommendations) ? data.recommendations : [];
     if (!items.length) {
-      setStatus(data?.refreshedAtUtc
-        ? 'No recommendations are available for this user yet.'
-        : 'No cached recommendations yet. Run the scheduled task or wait for its next refresh.');
+      setStatus('No recommendations yet.');
       return;
     }
 
-    const refreshedAt = data.refreshedAtUtc ? new Date(data.refreshedAtUtc) : null;
-    setStatus(refreshedAt && Date.now() - refreshedAt.getTime() > 48 * 60 * 60 * 1000
-      ? `Showing the last successful refresh from ${refreshedAt.toLocaleString()}.`
-      : '');
+    setStatus('');
 
     const posterLoads = [];
     for (const result of items) {
@@ -104,10 +99,6 @@
       const body = document.createElement('div');
       body.className = 'wr-card-body';
       addText(body, 'h2', '', item.name || 'Untitled');
-      addText(body, 'p', '', `${item.mediaType || 'Title'} · ${Math.round((Number(result.score) || 0) * 100)}% match`);
-      if (Array.isArray(item.genres) && item.genres.length) {
-        addText(body, 'p', '', item.genres.join(' · '));
-      }
       if (item.overview) addText(body, 'p', 'wr-overview', item.overview);
       card.appendChild(body);
 
@@ -116,22 +107,22 @@
           const button = document.createElement('button');
           button.className = 'raised button-submit';
           button.type = 'button';
-          button.textContent = 'Request via Jellyfin Enhanced';
+          button.textContent = 'Request';
           button.addEventListener('click', async () => {
             button.disabled = true;
             button.textContent = 'Requesting…';
             try {
               await jeApi.requestMedia(Number(tmdbId), item.mediaType === 'Movie' ? 'movie' : 'tv');
-              button.textContent = 'Request submitted';
+              button.textContent = 'Requested';
             } catch (error) {
               console.warn('Watch Recommendations: request failed', error);
-              button.textContent = 'Request failed';
+              button.textContent = 'Try again';
               button.disabled = false;
             }
           });
           card.appendChild(button);
         } else {
-          addText(card, 'p', 'wr-overview', 'Requesting this title is unavailable because Jellyfin Enhanced is not ready.');
+          addText(card, 'p', 'wr-overview', 'Request unavailable.');
         }
       }
 
@@ -148,13 +139,13 @@
 
   async function loadRecommendations() {
     if (typeof ApiClient === 'undefined' || !ApiClient.getJSON || !ApiClient.getUrl) {
-      setStatus('Jellyfin is not ready to load recommendations.');
+      setStatus('Please try again later.');
       return;
     }
 
     const version = ++requestVersion;
     const userId = ApiClient.getCurrentUserId?.();
-    setStatus('Loading your recommendations…');
+    setStatus('Loading…');
     reload.disabled = true;
     try {
       const response = await ApiClient.getJSON(ApiClient.getUrl('WatchRecommendations/recommendations'));
@@ -162,8 +153,8 @@
       render(response, version, userId);
     } catch (error) {
       if (version !== requestVersion) return;
-      console.warn('Watch Recommendations: failed to load cached results', error);
-      setStatus('Recommendations could not be loaded. Please try again later.');
+      console.warn('Watch Recommendations: failed to load results', error);
+      setStatus('Couldn’t load recommendations. Try again.');
     } finally {
       if (version === requestVersion) reload.disabled = false;
     }

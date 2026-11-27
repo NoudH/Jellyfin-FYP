@@ -5,13 +5,11 @@ A Jellyfin plugin that creates personalized movie and series recommendations fro
 ## Features
 
 - Calculates recommendations separately for each Jellyfin user using watched or started movies and series as viewing history.
-- Ranks unwatched library titles using genre and tag similarity to watched titles; watched-title completion and recency weight that similarity, while candidate ratings and release/addition recency contribute when available.
-- Stores the last successful results in a server-side cache. A refresh failure for one user keeps that user's previous cache.
+- Recommends unwatched titles using viewing history and ratings when available.
+- Refreshes each user's recommendations on a schedule and keeps the previous list if a refresh fails.
 - Optionally adds off-library movie and series candidates from Seerr when Jellyfin Enhanced (JE) is installed, Seerr is enabled and configured in JE, and the Jellyfin user is linked and eligible.
 - Uses JE in the web client for off-library posters and request actions. If JE or its Seerr integration is unavailable, recommendations continue with titles from the Jellyfin library.
-- Exposes results through an authenticated API for the signed-in user; clients cannot choose another user's cache by supplying a user ID.
-
-JE recommendations are fetched for a bounded set of watched titles that have TMDb IDs, rather than from a single Seerr personal feed. The integration reuses JE's configuration and internal implementation details, so compatibility may depend on the JE version.
+- The recommendations API only returns results for the signed-in user.
 
 ## Requirements
 
@@ -28,19 +26,19 @@ After the corresponding workflow has published a build, add one of these manifes
 
 ## Use
 
-The **Rebuild Watch Recommendations** task runs every 24 hours by default. In Jellyfin's **Dashboard → Scheduled Tasks**, you can change its trigger cadence or run it manually. Each run processes users independently and replaces each user's cache only after a successful refresh.
+The **Rebuild Watch Recommendations** task runs every 24 hours by default. In Jellyfin's **Dashboard → Scheduled Tasks**, change how often it runs or start it manually. A failed refresh keeps the previous list.
 
-The embedded **Watch Recommendations** view reads the latest cached results. Its **Reload results** button reloads the cache from the API; it does not start the scheduled task. A first-time install may show no recommendations until the task has run successfully.
+The **Recommended** view shows the latest list. Use **Reload** to refresh it; this does not start the scheduled task. After installing, wait for the first scheduled run.
 
-The authenticated endpoint is `GET /WatchRecommendations/recommendations`. It derives the user from the Jellyfin authentication identity. Cached data is persisted under Jellyfin's plugin path at `configurations/Jellyfin.Plugin.WatchRecommendations/recommendations-cache.json`.
+The signed-in user's recommendations are available at `GET /WatchRecommendations/recommendations`.
 
 ### KefinTweaks home-screen row
 
-KefinTweaks can render the in-library recommendations as a custom home-screen section. Add a query with type **Custom Endpoint** and path `/WatchRecommendations/recommendations/items`; set a `Limit` such as `16` in the query options. The endpoint returns the standard Jellyfin `{ Items, TotalRecordCount }` result with Jellyfin item DTOs, preserves recommendation order, and includes only movies and series that the signed-in user can see in the library. Off-library Seerr results are omitted because they are not Jellyfin library items.
+To show only titles already in your library, add a KefinTweaks query with type **Custom Endpoint** and path `/WatchRecommendations/recommendations/items`. Set a limit in the query options.
 
 #### Include external Seerr titles
 
-To show a mixed row containing library and off-library recommendations, install KefinTweaks and Jellyfin's JavaScript Injector, then add a script in the Injector that loads the optional integration:
+To show library and off-library titles together in a **Recommended** row, install KefinTweaks and Jellyfin's JavaScript Injector, then add this script in the Injector:
 
 ```javascript
 const script = document.createElement('script');
@@ -49,7 +47,7 @@ script.async = true;
 document.head.appendChild(script);
 ```
 
-For builds from the `Dev` branch, replace `@master` with `@Dev`. The integration adds a dedicated **Recommended for you** strip to the KefinTweaks home screen. Off-library posters and request buttons appear when JE's Seerr integration is active and the Jellyfin user is linked; otherwise, the strip continues with visible in-library items.
+For builds from `Dev`, replace `@master` with `@Dev`. The row uses normal Jellyfin cards for library titles and JE's Seerr cards for off-library titles, including JE's poster and request controls. If JE is unavailable, only library titles appear. Disable the custom endpoint row above to avoid duplicates.
 
 ## Build and test
 

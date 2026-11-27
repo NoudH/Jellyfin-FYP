@@ -91,7 +91,96 @@
         return entries;
     }
 
-    const helpers = { buildRecommendationEntries, getTmdbId, normalizeMediaType };
+    function toJellyseerrCardItem(entry, details) {
+        if (!entry?.tmdbId || !details) return null;
+
+        const recommendation = entry.item || {};
+        const rawVoteAverage = details.voteAverage ?? details.vote_average ?? read(recommendation, 'communityRating', 'CommunityRating');
+        const voteAverage = Number(rawVoteAverage);
+        const mediaInfo = details.mediaInfo && typeof details.mediaInfo === 'object' ? { ...details.mediaInfo } : {};
+        delete mediaInfo.jellyfinMediaId;
+        delete mediaInfo.jellyfinMediaId4k;
+
+        const premiereDate = read(recommendation, 'premiereDate', 'PremiereDate');
+        const date = premiereDate ? String(premiereDate).slice(0, 10) : undefined;
+        const name = details.title || details.name || read(recommendation, 'name', 'Name') || 'Untitled';
+
+        return {
+            ...details,
+            id: entry.tmdbId,
+            mediaType: entry.mediaType,
+            title: name,
+            name,
+            overview: details.overview || read(recommendation, 'overview', 'Overview') || '',
+            posterPath: details.posterPath || details.poster_path || null,
+            voteAverage: Number.isFinite(voteAverage) ? voteAverage : 0,
+            releaseDate: details.releaseDate || details.release_date || (entry.mediaType === 'movie' ? date : undefined),
+            firstAirDate: details.firstAirDate || details.first_air_date || (entry.mediaType === 'tv' ? date : undefined),
+            mediaInfo
+        };
+    }
+
+    function attachScrollButtons(section, scroller, documentRef = root.document, ResizeObserverImpl = root.ResizeObserver) {
+        const scrollButtons = documentRef.createElement('div');
+        scrollButtons.className = 'emby-scrollbuttons padded-right hide';
+
+        function createButton(direction) {
+            const button = documentRef.createElement('button');
+            button.type = 'button';
+            button.className = 'emby-scrollbuttons-button paper-icon-button-light';
+            button.setAttribute('data-ripple', 'false');
+            button.setAttribute('data-direction', direction);
+            button.setAttribute('title', direction === 'left' ? 'Previous' : 'Next');
+            button.setAttribute('aria-label', direction === 'left' ? 'Scroll recommendations left' : 'Scroll recommendations right');
+            button.disabled = true;
+
+            const icon = documentRef.createElement('span');
+            icon.className = `material-icons chevron_${direction}`;
+            icon.setAttribute('aria-hidden', 'true');
+            button.appendChild(icon);
+            button.addEventListener('click', () => {
+                scroller.scrollBy({
+                    left: (direction === 'left' ? -1 : 1) * scroller.clientWidth * 0.8,
+                    behavior: 'smooth'
+                });
+            });
+            return button;
+        }
+
+        const leftButton = createButton('left');
+        const rightButton = createButton('right');
+        scrollButtons.appendChild(leftButton);
+        scrollButtons.appendChild(rightButton);
+
+        function update() {
+            const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+            leftButton.disabled = scroller.scrollLeft <= 1;
+            rightButton.disabled = scroller.scrollLeft >= maxScroll - 1;
+            scrollButtons.classList.toggle('hide', maxScroll <= 1);
+        }
+
+        section.appendChild(scrollButtons);
+        scroller.addEventListener('scroll', update, { passive: true });
+
+        let resizeObserver;
+        if (typeof ResizeObserverImpl === 'function') {
+            resizeObserver = new ResizeObserverImpl(update);
+            resizeObserver.observe(scroller);
+            if (scroller.firstElementChild) resizeObserver.observe(scroller.firstElementChild);
+        }
+
+        update();
+        return {
+            element: scrollButtons,
+            update,
+            disconnect() {
+                resizeObserver?.disconnect();
+                scroller.removeEventListener('scroll', update);
+            }
+        };
+    }
+
+    const helpers = { attachScrollButtons, buildRecommendationEntries, getTmdbId, normalizeMediaType, toJellyseerrCardItem };
     if (typeof module === 'object' && module.exports) module.exports = helpers;
     if (!root.document || !root.document.body) return;
     if (root.__watchRecommendationsKefinTweaksLoaded) return;
@@ -128,23 +217,7 @@
         if (root.document.getElementById(`${SECTION_ID}-styles`)) return;
         const style = root.document.createElement('style');
         style.id = `${SECTION_ID}-styles`;
-        style.textContent = `
-            .wr-ktw-section { order: 1000; margin: 0 0 1.5rem; }
-            .wr-ktw-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: .75rem; padding: 0 1.5%; }
-            .wr-ktw-heading h2 { margin: 0 0 .65rem; font-size: 1.4rem; }
-            .wr-ktw-status { margin: 0 0 .65rem; opacity: .75; font-size: .9rem; }
-            .wr-ktw-reload { margin: 0 0 .65rem auto; }
-            .wr-ktw-track { display: flex; gap: .85rem; overflow-x: auto; overscroll-behavior-x: contain; padding: 0 1.5% .75rem; scroll-snap-type: x mandatory; }
-            .wr-ktw-card { flex: 0 0 clamp(145px, 16vw, 220px); min-width: 0; overflow: hidden; border-radius: .35rem; background: rgba(0, 0, 0, .28); scroll-snap-align: start; }
-            .wr-ktw-poster-link { display: block; color: inherit; }
-            .wr-ktw-poster { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: rgba(0, 0, 0, .35); }
-            .wr-ktw-body { padding: .65rem .75rem; }
-            .wr-ktw-title { margin: 0 0 .35rem; font-size: 1rem; line-height: 1.25; }
-            .wr-ktw-meta { margin: 0; opacity: .78; font-size: .85rem; }
-            .wr-ktw-overview { display: -webkit-box; overflow: hidden; margin: .4rem 0 0; opacity: .72; font-size: .82rem; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-            .wr-ktw-request { margin: 0 .75rem .75rem; width: calc(100% - 1.5rem); }
-            @media (max-width: 700px) { .wr-ktw-card { flex-basis: 42vw; } }
-        `;
+        style.textContent = `.wr-ktw-section { order: 1000; }`;
         root.document.head.appendChild(style);
     }
 
@@ -152,45 +225,41 @@
         let section = container.querySelector(`[data-wr-ktw-id="${SECTION_ID}"]`);
         if (section) return section;
 
-        section = root.document.createElement('section');
-        section.className = 'verticalSection emby-scroller-container custom-scroller-container wr-ktw-section';
+        section = root.document.createElement('div');
+        section.className = 'verticalSection emby-scroller-container jellyseerr-details-section wr-ktw-section';
         section.dataset.wrKtwId = SECTION_ID;
+        section.dataset.jellyseerrSection = 'true';
 
-        const heading = root.document.createElement('div');
-        heading.className = 'wr-ktw-heading';
         const title = root.document.createElement('h2');
-        title.textContent = 'Recommended for you';
-        const status = root.document.createElement('p');
-        status.className = 'wr-ktw-status';
-        const reload = root.document.createElement('button');
-        reload.className = 'raised button-submit wr-ktw-reload';
-        reload.type = 'button';
-        reload.textContent = 'Reload';
-        heading.append(title, status, reload);
+        title.className = 'sectionTitle sectionTitle-cards focuscontainer-x padded-right';
+        title.textContent = 'Recommended';
+
+        const scroller = root.document.createElement('div');
+        scroller.className = 'padded-top-focusscale padded-bottom-focusscale no-padding emby-scroller';
+        scroller.dataset.horizontal = 'true';
+        scroller.dataset.centerfocus = 'card';
+        scroller.dataset.scrollModeX = 'custom';
+        scroller.style.scrollSnapType = 'none';
+        scroller.style.touchAction = 'auto';
+        scroller.style.overscrollBehaviorX = 'contain';
+        scroller.style.overscrollBehaviorY = 'auto';
+        scroller.style.webkitOverflowScrolling = 'touch';
 
         const track = root.document.createElement('div');
-        track.className = 'wr-ktw-track';
-        section.append(heading, track);
+        track.className = 'focuscontainer-x itemsContainer scrollSlider animatedScrollX wr-ktw-track';
+        track.style.whiteSpace = 'nowrap';
+        scroller.appendChild(track);
+        section.append(title, scroller);
+        section._wrScrollControls = attachScrollButtons(section, scroller);
         container.appendChild(section);
-
-        reload.addEventListener('click', () => {
-            if (activeContainer === container) void loadRecommendations(container, currentUserId(), true);
-        });
         return section;
     }
 
-    function setStatus(section, message) {
-        const status = section.querySelector('.wr-ktw-status');
-        status.textContent = message || '';
-        status.hidden = !message;
-    }
-
-    function addText(parent, tagName, className, value) {
-        const element = root.document.createElement(tagName);
-        if (className) element.className = className;
-        element.textContent = value || '';
-        parent.appendChild(element);
-        return element;
+    function removeRecommendationSection(container) {
+        const section = container?.querySelector(`[data-wr-ktw-id="${SECTION_ID}"]`);
+        if (!section) return;
+        section._wrScrollControls?.disconnect();
+        section.remove();
     }
 
     function getItems(result) {
@@ -203,121 +272,53 @@
         return Array.isArray(recommendations) ? recommendations : [];
     }
 
-    function getImageUrl(entry) {
-        const apiClient = root.ApiClient;
-        const libraryItem = entry.libraryItem;
-        if (entry.isInLibrary && libraryItem && typeof apiClient?.getImageUrl === 'function') {
-            const id = read(libraryItem, 'id', 'Id');
-            if (id) return apiClient.getImageUrl(id, 'Primary', { maxWidth: 420 });
+    function buildLocalCard(entry) {
+        try {
+            return root.cardBuilder?.buildCard?.(entry.libraryItem, false, 'portrait') || null;
+        } catch (error) {
+            console.warn('Watch Recommendations: failed to build a library card', error);
+            return null;
         }
-        return null;
     }
 
-    function addEntryCard(track, entry, version, userId) {
-        const item = entry.item;
-        const card = root.document.createElement('article');
-        card.className = 'wr-ktw-card';
-
-        const posterLink = root.document.createElement('a');
-        posterLink.className = 'wr-ktw-poster-link';
-        const image = root.document.createElement('img');
-        image.className = 'wr-ktw-poster';
-        image.loading = 'lazy';
-        image.alt = '';
-        image.addEventListener('error', () => image.remove());
-        const localImageUrl = getImageUrl(entry);
-        if (localImageUrl) image.src = localImageUrl;
-        posterLink.appendChild(image);
-
-        if (entry.isInLibrary) {
-            const id = read(entry.libraryItem, 'id', 'Id');
-            const serverId = root.ApiClient?.serverId?.();
-            if (id && serverId) {
-                posterLink.href = `#/details?id=${encodeURIComponent(id)}&serverId=${encodeURIComponent(serverId)}`;
-            } else {
-                posterLink.removeAttribute('href');
-            }
-        } else {
-            posterLink.removeAttribute('href');
-        }
-        card.appendChild(posterLink);
-
-        const body = root.document.createElement('div');
-        body.className = 'wr-ktw-body';
-        const name = read(entry.libraryItem, 'name', 'Name') || read(item, 'name', 'Name') || 'Untitled';
-        addText(body, 'h3', 'wr-ktw-title', name);
-        const scoreText = entry.score == null ? 'Recommended' : `${Math.round(entry.score * 100)}% match`;
-        const label = entry.isInLibrary ? 'In your library' : 'Available to request';
-        addText(body, 'p', 'wr-ktw-meta', `${label} · ${scoreText}`);
-        const overview = read(item, 'overview', 'Overview');
-        if (overview) addText(body, 'p', 'wr-ktw-overview', overview);
-        card.appendChild(body);
-
-        if (!entry.isInLibrary) {
-            const button = root.document.createElement('button');
-            button.className = 'raised button-submit wr-ktw-request';
-            button.type = 'button';
-            button.textContent = 'Request via Jellyfin Enhanced';
-            button.addEventListener('click', async event => {
-                event.preventDefault();
-                event.stopPropagation();
-                const jeApi = currentJeApi();
-                if (!jeApi?.requestMedia || !entry.tmdbId || !isCurrent(version, userId, activeContainer)) return;
-                button.disabled = true;
-                button.textContent = 'Requesting…';
-                try {
-                    const result = await jeApi.requestMedia(entry.tmdbId, entry.mediaType);
-                    if (!result) throw new Error('The request was not accepted.');
-                    if (isCurrent(version, userId, activeContainer)) button.textContent = 'Request submitted';
-                } catch (error) {
-                    console.warn('Watch Recommendations: Seerr request failed', error);
-                    if (isCurrent(version, userId, activeContainer)) {
-                        button.textContent = 'Request failed';
-                        button.disabled = false;
-                    }
-                }
-            });
-            card.appendChild(button);
-        }
-
-        track.appendChild(card);
-        if (!entry.isInLibrary) return () => loadExternalPoster(image, entry, version, userId, activeContainer);
-        return null;
-    }
-
-    async function loadExternalPoster(image, entry, version, userId, container) {
+    async function buildExternalCard(entry, version, userId, container) {
+        const je = root.JellyfinEnhanced;
         const jeApi = currentJeApi();
+        const createCard = je?.jellyseerrUI?.createJellyseerrCard;
         const getDetails = entry.mediaType === 'movie' ? jeApi?.fetchMovieDetails : jeApi?.fetchTvShowDetails;
-        if (typeof getDetails !== 'function') return;
+        if (typeof createCard !== 'function' || typeof getDetails !== 'function') return null;
+
         try {
             const details = await getDetails.call(jeApi, entry.tmdbId);
-            if (!isCurrent(version, userId, container)) return;
-            const posterPath = details?.posterPath || details?.poster_path;
-            if (typeof posterPath !== 'string' || !/^\/?[A-Za-z0-9._/-]+$/.test(posterPath)) {
-                image.remove();
-                return;
-            }
-            const safePath = posterPath.startsWith('/') ? posterPath : `/${posterPath}`;
-            image.src = `https://image.tmdb.org/t/p/w500${safePath}`;
-        } catch (_) {
-            if (isCurrent(version, userId, container)) image.remove();
+            if (!isCurrent(version, userId, container)) return null;
+            const cardItem = toJellyseerrCardItem(entry, details);
+            return cardItem ? createCard.call(je.jellyseerrUI, cardItem, true, true) : null;
+        } catch (error) {
+            console.warn('Watch Recommendations: failed to build a Seerr card', error);
+            return null;
         }
+    }
+
+    async function buildEntryCard(entry, version, userId, container) {
+        if (!isCurrent(version, userId, container)) return null;
+        return entry.isInLibrary
+            ? buildLocalCard(entry)
+            : buildExternalCard(entry, version, userId, container);
     }
 
     async function loadRecommendations(container, userId, force = false) {
         if (!container || !userId || !root.ApiClient?.getJSON || !root.ApiClient?.getUrl) return;
         if (!force && activeContainer === container && activeUserId === userId && Date.now() - lastLoadedAt < REFRESH_INTERVAL_MS) return;
 
+        if (activeUserId && activeUserId !== userId) {
+            requestVersion++;
+            removeRecommendationSection(activeContainer);
+            lastLoadedAt = 0;
+        }
         activeContainer = container;
         activeUserId = userId;
         lastLoadedAt = Date.now();
         const version = ++requestVersion;
-        const section = createSection(container);
-        const track = section.querySelector('.wr-ktw-track');
-        const reload = section.querySelector('.wr-ktw-reload');
-        track.replaceChildren();
-        setStatus(section, 'Loading recommendations…');
-        reload.disabled = true;
 
         try {
             const itemsUrl = new URL(root.ApiClient.getUrl('WatchRecommendations/recommendations/items'), root.location.origin);
@@ -351,7 +352,11 @@
             });
             let jeReady = false;
             const jeApi = currentJeApi();
-            if (hasExternal && typeof jeApi?.checkUserStatus === 'function' && typeof jeApi?.requestMedia === 'function') {
+            const jeCards = root.JellyfinEnhanced?.jellyseerrUI;
+            if (hasExternal
+                && typeof jeCards?.createJellyseerrCard === 'function'
+                && typeof jeApi?.checkUserStatus === 'function'
+                && typeof jeApi?.requestMedia === 'function') {
                 try {
                     const status = await jeApi.checkUserStatus();
                     jeReady = status?.active === true && status?.userFound === true;
@@ -363,40 +368,31 @@
 
             const entries = buildRecommendationEntries(recommendations, libraryItems, jeReady);
             if (!entries.length) {
-                const message = hasExternal && !jeReady
-                    ? 'Your cached Seerr recommendations need Jellyfin Enhanced with an active, linked account.'
-                    : cache?.refreshedAtUtc || cache?.RefreshedAtUtc
-                        ? 'No recommendations are available for this user.'
-                        : 'No cached recommendations yet. Wait for the scheduled refresh to complete.';
-                setStatus(section, message);
+                removeRecommendationSection(container);
                 return;
             }
 
-            const refreshedAt = cache?.refreshedAtUtc || cache?.RefreshedAtUtc;
-            const isStale = refreshedAt && Date.now() - new Date(refreshedAt).getTime() > 48 * 60 * 60 * 1000;
-            const jeFallback = hasExternal && !jeReady ? ' Seerr titles need an active linked Jellyfin Enhanced account.' : '';
-            setStatus(section, `${isStale ? `Showing the last successful refresh from ${new Date(refreshedAt).toLocaleString()}.` : 'Showing your latest cached recommendations.'}${jeFallback}`);
-
-            const posterLoads = [];
-            for (const entry of entries) {
-                const loadPoster = addEntryCard(track, entry, version, userId);
-                if (loadPoster) posterLoads.push(loadPoster);
-            }
-            for (let index = 0; index < posterLoads.length; index += 4) {
+            const section = createSection(container);
+            const track = section.querySelector('.wr-ktw-track');
+            track.replaceChildren();
+            for (let index = 0; index < entries.length; index += 4) {
                 if (!isCurrent(version, userId, container)) return;
-                await Promise.all(posterLoads.slice(index, index + 4).map(loadPoster => loadPoster()));
+                const cards = await Promise.all(entries.slice(index, index + 4)
+                    .map(entry => buildEntryCard(entry, version, userId, container)));
+                if (!isCurrent(version, userId, container)) return;
+                cards.filter(Boolean).forEach(card => track.appendChild(card));
+                section._wrScrollControls?.update();
             }
+
+            if (!track.childElementCount) removeRecommendationSection(container);
         } catch (error) {
             if (!isCurrent(version, userId, container)) return;
             console.warn('Watch Recommendations: failed to load KefinTweaks row', error);
-            setStatus(section, 'Recommendations could not be loaded. Please try again later.');
-        } finally {
-            if (isCurrent(version, userId, container)) reload.disabled = false;
         }
     }
 
     function findHomeContainer() {
-        if (!root.cardBuilder?.renderCards) return null;
+        if (!root.cardBuilder?.buildCard) return null;
         return root.document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
     }
 
@@ -406,7 +402,7 @@
         if (!container || !userId) {
             if (activeUserId && userId !== activeUserId) {
                 requestVersion++;
-                activeContainer?.querySelector(`[data-wr-ktw-id="${SECTION_ID}"]`)?.remove();
+                removeRecommendationSection(activeContainer);
                 activeContainer = null;
                 activeUserId = null;
                 lastLoadedAt = 0;
