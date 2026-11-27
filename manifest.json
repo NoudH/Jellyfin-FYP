@@ -1,0 +1,11 @@
+[
+  {
+    "guid": "2e8de290-51e4-4a2d-b148-73f43e48a72a",
+    "name": "Watch Recommendations",
+    "description": "Provides per-user watch recommendations based on viewing history, with optional Jellyfin Enhanced Seerr integration.",
+    "overview": "Personalized recommendations for what to watch next.",
+    "owner": "Jellyfin-FYP contributors",
+    "category": "General",
+    "versions": []
+  }
+]

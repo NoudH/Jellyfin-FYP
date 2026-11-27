@@ -1,0 +1,175 @@
+<div data-role="content">
+  <section class="watch-recommendations-page" aria-live="polite">
+    <h1>Watch Recommendations</h1>
+    <p class="wr-status">Loading your recommendations…</p>
+    <button class="raised button-submit wr-reload" type="button">Reload results</button>
+    <div class="wr-grid"></div>
+  </section>
+</div>
+<style>
+  .watch-recommendations-page { padding: 1.5rem; }
+  .wr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 1rem; margin-top: 1rem; }
+  .wr-card { display: flex; flex-direction: column; min-width: 0; border-radius: .5rem; overflow: hidden; background: rgba(0, 0, 0, .24); }
+  .wr-card img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: rgba(0, 0, 0, .3); }
+  .wr-card-body { padding: .8rem; }
+  .wr-card h2 { font-size: 1rem; margin: 0 0 .4rem; }
+  .wr-card p { margin: .35rem 0; }
+  .wr-card .wr-overview { opacity: .8; font-size: .9rem; }
+  .wr-card button { margin: 0 .8rem .8rem; }
+</style>
+<script>
+(function () {
+  const page = document.querySelector('.watch-recommendations-page');
+  if (!page || page.dataset.initialized === 'true') return;
+  page.dataset.initialized = 'true';
+
+  const status = page.querySelector('.wr-status');
+  const grid = page.querySelector('.wr-grid');
+  const reload = page.querySelector('.wr-reload');
+  let requestVersion = 0;
+
+  function setStatus(message) {
+    status.textContent = message;
+    status.hidden = !message;
+  }
+
+  function addText(parent, tag, className, value) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    element.textContent = value || '';
+    parent.appendChild(element);
+    return element;
+  }
+
+  function render(data, version, userId) {
+    grid.replaceChildren();
+    const items = Array.isArray(data?.recommendations) ? data.recommendations : [];
+    if (!items.length) {
+      setStatus(data?.refreshedAtUtc
+        ? 'No recommendations are available for this user yet.'
+        : 'No cached recommendations yet. Run the scheduled task or wait for its next refresh.');
+      return;
+    }
+
+    const refreshedAt = data.refreshedAtUtc ? new Date(data.refreshedAtUtc) : null;
+    setStatus(refreshedAt && Date.now() - refreshedAt.getTime() > 48 * 60 * 60 * 1000
+      ? `Showing the last successful refresh from ${refreshedAt.toLocaleString()}.`
+      : '');
+
+    const posterLoads = [];
+    for (const result of items) {
+      const item = result?.item;
+      if (!item) continue;
+      const card = document.createElement('article');
+      card.className = 'wr-card';
+      const jeApi = window.JellyfinEnhanced?.jellyseerrAPI;
+      const tmdbId = item.providerIds?.Tmdb || item.providerIds?.tmdb;
+
+      if (item.isInLibrary && item.id && typeof ApiClient !== 'undefined' && ApiClient.getImageUrl) {
+        const image = document.createElement('img');
+        image.loading = 'lazy';
+        image.alt = '';
+        image.src = ApiClient.getImageUrl(item.id, 'Primary', { maxWidth: 420 });
+        image.addEventListener('error', () => image.remove());
+        card.appendChild(image);
+      } else if (!item.isInLibrary && jeApi && tmdbId && Number.isInteger(Number(tmdbId))) {
+        const getDetails = item.mediaType === 'Movie' ? jeApi.fetchMovieDetails : jeApi.fetchTvShowDetails;
+        if (typeof getDetails === 'function') {
+          const image = document.createElement('img');
+          image.loading = 'lazy';
+          image.alt = '';
+          image.dataset.posterPending = 'true';
+          image.addEventListener('error', () => image.remove());
+          card.appendChild(image);
+          posterLoads.push(async () => {
+            try {
+              const details = await getDetails.call(jeApi, Number(tmdbId));
+              if (version !== requestVersion || userId !== ApiClient.getCurrentUserId?.()) return;
+              const posterPath = details?.posterPath || details?.poster_path;
+              if (!posterPath || typeof posterPath !== 'string') {
+                image.remove();
+                return;
+              }
+
+              const safePosterPath = posterPath.startsWith('/') ? posterPath : `/${posterPath}`;
+              image.src = `https://image.tmdb.org/t/p/w500${safePosterPath}`;
+              delete image.dataset.posterPending;
+            } catch (_) {
+              image.remove();
+            }
+          });
+        }
+      }
+
+      const body = document.createElement('div');
+      body.className = 'wr-card-body';
+      addText(body, 'h2', '', item.name || 'Untitled');
+      addText(body, 'p', '', `${item.mediaType || 'Title'} · ${Math.round((Number(result.score) || 0) * 100)}% match`);
+      if (Array.isArray(item.genres) && item.genres.length) {
+        addText(body, 'p', '', item.genres.join(' · '));
+      }
+      if (item.overview) addText(body, 'p', 'wr-overview', item.overview);
+      card.appendChild(body);
+
+      if (!item.isInLibrary) {
+        if (jeApi?.requestMedia && tmdbId) {
+          const button = document.createElement('button');
+          button.className = 'raised button-submit';
+          button.type = 'button';
+          button.textContent = 'Request via Jellyfin Enhanced';
+          button.addEventListener('click', async () => {
+            button.disabled = true;
+            button.textContent = 'Requesting…';
+            try {
+              await jeApi.requestMedia(Number(tmdbId), item.mediaType === 'Movie' ? 'movie' : 'tv');
+              button.textContent = 'Request submitted';
+            } catch (error) {
+              console.warn('Watch Recommendations: request failed', error);
+              button.textContent = 'Request failed';
+              button.disabled = false;
+            }
+          });
+          card.appendChild(button);
+        } else {
+          addText(card, 'p', 'wr-overview', 'Requesting this title is unavailable because Jellyfin Enhanced is not ready.');
+        }
+      }
+
+      grid.appendChild(card);
+    }
+
+    void (async () => {
+      for (let index = 0; index < posterLoads.length; index += 4) {
+        if (version !== requestVersion || userId !== ApiClient.getCurrentUserId?.()) return;
+        await Promise.all(posterLoads.slice(index, index + 4).map(loadPoster => loadPoster()));
+      }
+    })();
+  }
+
+  async function loadRecommendations() {
+    if (typeof ApiClient === 'undefined' || !ApiClient.getJSON || !ApiClient.getUrl) {
+      setStatus('Jellyfin is not ready to load recommendations.');
+      return;
+    }
+
+    const version = ++requestVersion;
+    const userId = ApiClient.getCurrentUserId?.();
+    setStatus('Loading your recommendations…');
+    reload.disabled = true;
+    try {
+      const response = await ApiClient.getJSON(ApiClient.getUrl('WatchRecommendations/recommendations'));
+      if (version !== requestVersion || userId !== ApiClient.getCurrentUserId?.()) return;
+      render(response, version, userId);
+    } catch (error) {
+      if (version !== requestVersion) return;
+      console.warn('Watch Recommendations: failed to load cached results', error);
+      setStatus('Recommendations could not be loaded. Please try again later.');
+    } finally {
+      if (version === requestVersion) reload.disabled = false;
+    }
+  }
+
+  reload.addEventListener('click', loadRecommendations);
+  loadRecommendations();
+})();
+</script>
